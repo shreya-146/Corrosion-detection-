@@ -1,0 +1,71 @@
+```python
+import torch
+import cv2
+import matplotlib.pyplot as plt
+from torchvision import transforms
+
+def to_device(data, device):
+    if isinstance(data, (list, tuple)):
+        return [to_device(x, device) for x in data]
+    return data.to(device, non_blocking=True)
+
+def predict_single(image, model):
+    xb = image.unsqueeze(0)
+    xb = to_device(xb, device)
+    preds = model(xb)
+    prediction = preds[0]
+    a, b = prediction[0].item(), prediction[1].item()
+    print(a, b)
+    print("Corrosion" if a > b else "No Corrosion")
+    plt.imshow(image.cpu().permute(1, 2, 0))
+
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
+class Corrosion_Detection(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.network = torch.nn.Sequential(
+            torch.nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool2d(2, 2),
+            torch.nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool2d(2, 2),
+            torch.nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool2d(2, 2),
+            torch.nn.Flatten(),
+            torch.nn.Linear(256*28*28, 1024),
+            torch.nn.ReLU(),
+            torch.nn.Linear(1024, 512),
+            torch.nn.ReLU(),
+            torch.nn.Linear(512, 2)
+        )
+
+    def forward(self, xb):
+        return self.network(xb)
+
+model = Corrosion_Detection()
+model.load_state_dict(torch.load('/content/drive/My Drive/Corrosion_Detection.pth'))
+model = to_device(model, device)
+model.eval()
+
+image = cv2.imread('/content/download(2).jpeg')
+image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+transform = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Resize((256, 256)),
+    transforms.CenterCrop(224),
+    transforms.Normalize([0.485, 0.456, 0.406],
+                         [0.229, 0.224, 0.225])
+])
+tensor = transform(image)
+tensor = tensor.to(device)
+predict_single(tensor, model)
+```
